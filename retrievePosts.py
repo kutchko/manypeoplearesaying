@@ -10,6 +10,7 @@ import csv
 from bs4 import BeautifulSoup
 import requests
 import json
+from urllib3.exceptions import ProtocolError
 
 # import authentication data
 # in separate file to keep secret key secret
@@ -59,6 +60,8 @@ def retrieveURL(url):
         instagram_page = requests.get(url)
     except requests.exceptions.HTTPError as e:
         return( ('error', None, 'HTTP', e) )
+    except KeyboardInterrupt:
+        raise Exception('Keyboard interruption')
     else:
         soup_result = applySoup(instagram_page, url)
         return(soup_result)
@@ -71,11 +74,10 @@ def getInstagramData(tweetid, url):
     if soup_result[0] == 'caption':
         # write CSV
         instawriter.writerow( [tweetid, soup_result[1], soup_result[2], None, None] )
-        print(soup_result[2])
+        print(soup_result[1], soup_result[2])
 
     else:  # error
         # write CSV
-        errorCount += 1
         instawriter.writerow( [tweetid, soup_result[1], None, soup_result[2], soup_result[3]] )
 
 
@@ -111,7 +113,9 @@ class MyStreamListener(tweepy.StreamListener):
 
         #Error handling
         except BaseException as e:
-            print("Error on_status: %s" % str(e))
+            print("Error on_status: %s %s %s" % (str(e), status.user.screen_name, status.id))
+        except KeyboardInterrupt:
+            return False
         return True
 
     #Error handling
@@ -125,8 +129,15 @@ class MyStreamListener(tweepy.StreamListener):
         return True 
 
 #Create a stream object  
-twitter_stream = tweepy.Stream(auth, MyStreamListener())
-twitter_stream.filter(locations=[-180,-90,180,90])
+while True:
+    try:
+        twitter_stream = tweepy.Stream(auth, MyStreamListener())
+        twitter_stream.filter(locations=[-180,-90,180,90])
+    except ProtocolError:
+        continue
+    except KeyboardInterrupt:
+        twitter_stream.disconnect()
+        break
 
 
 
