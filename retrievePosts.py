@@ -73,12 +73,9 @@ def getInstagramData(tweetid, url):
     soup_result = retrieveURL(url)
     if soup_result[0] == 'caption':
         # write CSV
-        instawriter.writerow( [tweetid, soup_result[1], soup_result[2], None, None] )
+        instawriter.writerow( [tweetid, soup_result[1], soup_result[2]] )
         print(soup_result[1], soup_result[2])
 
-    else:  # error
-        # write CSV
-        instawriter.writerow( [tweetid, soup_result[1], None, soup_result[2], soup_result[3]] )
 
 
 
@@ -91,7 +88,7 @@ def process_status(status):
     if regex:
         content = regex.group(1)
         url = regex.group(2)
-        tweetwriter.writerow([status.id, status.user.screen_name, latitude, longitude, url, content])
+        tweetwriter.writerow([status.id, status.user.screen_name, latitude, longitude, url, content, status.created_at])
 
         getInstagramData(status.id, url)
     else:
@@ -115,6 +112,7 @@ class MyStreamListener(tweepy.StreamListener):
         except BaseException as e:
             print("Error on_status: %s %s %s" % (str(e), status.user.screen_name, status.id))
         except KeyboardInterrupt:
+            raise Exception('Keyboard interruption')
             return False
         return True
 
