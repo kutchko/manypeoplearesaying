@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="icon" href="../../favicon.ico">
+
+    <title>Many People Are Saying</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="../static/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
+
+    <!-- Custom styles for this template -->
+    <!-- <link href="starter-template.css" rel="stylesheet"> -->
+
+    <!-- Just for debugging purposes. Don't actually copy these 2 lines! -->
+    <!--[if lt IE 9]><script src="../../assets/js/ie8-responsive-file-warning.js"></script><![endif]-->
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+      <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <style>
+
+    #container2 {
+      margin-bottom: 5px;
+      overflow: hidden;
+      border: 2px solid silver;
+      border-radius: 6px;
+      background: white;
+    }
+    .zoom-button {
+      width: 30px;
+      height: 30px;
+      border-radius: 4px;
+      border: none;
+      background: silver;
+      font-size: 16px;
+      color: white;
+      cursor: pointer;
+    }
+
+    #zoom-info {
+      display: inline-block;
+      padding: 10px;
+    }
+
+    </style>
+
+  </head>
+
+  <body>
+
+
+<br><br>
+
+<div>
+<h2>Many People Are Saying</h2>
+</div>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://d3js.org/topojson.v1.min.js"></script>
+<!-- I recommend you host this file on your own, since this will change without warning -->
+<script src="../static/js/datamaps.world.min.js"></script>
+
+
+<!-- helpful zoom functions for DataMaps from https://jsfiddle.net/wunderbart/Lom3b0gb/ -->
+<div id="container2" style="position: relative; width: 800px; height: 400px;"></div>
+
+<button class="zoom-button" data-zoom="reset">0</button>
+<button class="zoom-button" data-zoom="out">-</button>
+<button class="zoom-button" data-zoom="in">+</button>
+<div id="zoom-info"></div>
+<script>
+
+function Zoom(args) {
+  $.extend(this, {
+    $buttons:   $(".zoom-button"),
+    $info:      $("#zoom-info"),
+    scale:      { max: 50, currentShift: 0 },
+    $container2: args.$container2,
+    datamap:    args.datamap
+  });
+
+  this.init();
+}
+
+Zoom.prototype.init = function() {
+  var paths = this.datamap.svg.selectAll("path"),
+      subunits = this.datamap.svg.selectAll(".datamaps-subunit");
+
+  // preserve stroke thickness
+  paths.style("vector-effect", "non-scaling-stroke");
+
+  // disable click on drag end
+  subunits.call(
+    d3.behavior.drag().on("dragend", function() {
+      d3.event.sourceEvent.stopPropagation();
+    })
+  );
+
+  this.scale.set = this._getScalesArray();
+  this.d3Zoom = d3.behavior.zoom().scaleExtent([ 1, this.scale.max ]);
+
+  this._displayPercentage(1);
+  this.listen();
+};
+
+Zoom.prototype.listen = function() {
+  this.$buttons.off("click").on("click", this._handleClick.bind(this));
+
+  this.datamap.svg
+    .call(this.d3Zoom.on("zoom", this._handleScroll.bind(this)))
+    .on("dblclick.zoom", null); // disable zoom on double-click
+};
+
+Zoom.prototype.reset = function() {
+  this._shift("reset");
+};
+
+Zoom.prototype._handleScroll = function() {
+  var translate = d3.event.translate,
+      scale = d3.event.scale,
+      limited = this._bound(translate, scale);
+
+  this.scrolled = true;
+
+  this._update(limited.translate, limited.scale);
+};
+
+Zoom.prototype._handleClick = function(event) {
+  var direction = $(event.target).data("zoom");
+
+  this._shift(direction);
+};
+
+Zoom.prototype._shift = function(direction) {
+  var center = [ this.$container2.width() / 2, this.$container2.height() / 2 ],
+      translate = this.d3Zoom.translate(), translate0 = [], l = [],
+      view = {
+        x: translate[0],
+        y: translate[1],
+        k: this.d3Zoom.scale()
+      }, bounded;
+
+  translate0 = [
+    (center[0] - view.x) / view.k,
+    (center[1] - view.y) / view.k
+  ];
+
+        if (direction == "reset") {
+        view.k = 1;
+    this.scrolled = true;
+  } else {
+        view.k = this._getNextScale(direction);
+  }
+
+l = [ translate0[0] * view.k + view.x, translate0[1] * view.k + view.y ];
+
+  view.x += center[0] - l[0];
+  view.y += center[1] - l[1];
+
+  bounded = this._bound([ view.x, view.y ], view.k);
+
+  this._animate(bounded.translate, bounded.scale);
+};
+
+Zoom.prototype._bound = function(translate, scale) {
+  var width = this.$container2.width(),
+      height = this.$container2.height();
+
+  translate[0] = Math.min(
+    (width / height)  * (scale - 1),
+    Math.max( width * (1 - scale), translate[0] )
+  );
+
+  translate[1] = Math.min(0, Math.max(height * (1 - scale), translate[1]));
+
+  return { translate: translate, scale: scale };
+};
+
+Zoom.prototype._update = function(translate, scale) {
+  this.d3Zoom
+    .translate(translate)
+    .scale(scale);
+
+  this.datamap.svg.selectAll("g")
+    .attr("transform", "translate(" + translate + ")scale(" + scale + ")");
+
+  this._displayPercentage(scale);
+};
+
+Zoom.prototype._animate = function(translate, scale) {
+  var _this = this,
+      d3Zoom = this.d3Zoom;
+
+  d3.transition().duration(350).tween("zoom", function() {
+    var iTranslate = d3.interpolate(d3Zoom.translate(), translate),
+        iScale = d3.interpolate(d3Zoom.scale(), scale);
+
+                return function(t) {
+      _this._update(iTranslate(t), iScale(t));
+    };
+  });
+};
+
+Zoom.prototype._displayPercentage = function(scale) {
+  var value;
+
+  value = Math.round(Math.log(scale) / Math.log(this.scale.max) * 100);
+  this.$info.text(value + "%");
+};
+
+Zoom.prototype._getScalesArray = function() {
+  var array = [],
+      scaleMaxLog = Math.log(this.scale.max);
+
+  for (var i = 0; i <= 10; i++) {
+    array.push(Math.pow(Math.E, 0.1 * i * scaleMaxLog));
+  }
+
+  return array;
+};
+
+Zoom.prototype._getNextScale = function(direction) {
+  var scaleSet = this.scale.set,
+      currentScale = this.d3Zoom.scale(),
+      lastShift = scaleSet.length - 1,
+      shift, temp = [];
+
+  if (this.scrolled) {
+
+    for (shift = 0; shift <= lastShift; shift++) {
+      temp.push(Math.abs(scaleSet[shift] - currentScale));
+    }
+
+    shift = temp.indexOf(Math.min.apply(null, temp));
+
+    if (currentScale >= scaleSet[shift] && shift < lastShift) {
+      shift++;
+    }
+
+    if (direction == "out" && shift > 0) {
+      shift--;
+    }
+
+    this.scrolled = false;
+
+  } else {
+
+    shift = this.scale.currentShift;
+
+    if (direction == "out") {
+      shift > 0 && shift--;
+    } else {
+      shift < lastShift && shift++;
+    }
+  }
+
+  this.scale.currentShift = shift;
+
+  return scaleSet[shift];
+};
+
+function Datamap() {
+        this.$container2 = $("#container2");
+        this.instance = new Datamaps({
+
+              scope: 'world',
+              element: this.$container2.get(0),
+              height: 400,
+              geographyConfig: {
+                  borderColor: '#666666',
+                  highlightOnHover: false,
+                  popupOnHover: false
+              },
+              fills: {
+                  defaultFill: '#CCCCFF',
+                  bubbleFill: '#000000'
+              },
+              bubblesConfig: {
+                  radius: 1.5,
+                  highlightFillColor: '#3366CC',
+                  borderWidth: 0,
+                  highlightBorderColor: '#3366CC',
+                  highlightBorderWidth: 4
+              },
+            done: this._handleMapReady.bind(this)
+
+        });
+}
+
+Datamap.prototype._handleMapReady = function(datamap) {
+        this.zoom = new Zoom({
+        $container2: this.$container2,
+        datamap: datamap
+  });
+};
+
+    var map = new Datamap();
+    console.log(map);
+          
+    dsvf = d3.dsv(';');
+    dsvf('../static/top_words.csv', function(data) {
+        return {
+            city: data.address,
+            latitude: +data.lat,
+            longitude: +data.long,
+            words: data.words,
+            fillKey: 'bubbleFill'
+        };
+      }, function( error, rows ) {
+          map.instance.bubbles(rows, {
+              popupTemplate: function(geo, data) {
+                  return '<div class="hoverinfo">' +
+                    '<strong>' +
+                    data.city +
+                    '</strong>' +
+                    '<br>' +
+                    data.words +
+                    '</div>'
+              }
+          })
+    });
+
+</script>
+</div>
+
+
+
+
+
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script>window.jQuery || document.write('<script src="../../assets/js/vendor/jquery.min.js"><\/script>')</script>
+    <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
+
+<script src="static/js/bootstrap.min.js"></script>
+
+  </body>
+</html>
